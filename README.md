@@ -1,30 +1,40 @@
 # ark-protocol
 
-Public edge worker used by [Ark](https://github.com/tschk/ark): HTTPS and WebSocket at Cloudflare Workers, with optional bridges to upstream HTTP/WebSocket (`ARK_WS_BACKEND_URL` / `ARK_HTTP_BACKEND_URL`) or raw TCP (`ARK_TCP_HOST` + `ARK_TCP_PORT` via `cloudflare:sockets`).
+**Open protocol and reference implementation** for presenting **many local ports on a VPS as one standardized HTTPS/WebSocket front** toward Cloudflare (or any TLS client). It is **not tied to Ark**: any control plane, script, or operator can adopt the [manifest](docs/manifest.md) and HTTP routes described here.
 
-## Layout
+This repository contains:
 
-- `worker/entry.mjs` — module worker uploaded by Ark’s control plane as `worker.js` (see Ark `cf_common` / `cloudflare_runtime`).
-- `wrangler.toml` — deploy this worker standalone for experiments; Ark normally uploads the same script via the Workers API.
+| Artifact | Role |
+|----------|------|
+| [`spec/mux-manifest.v1.schema.json`](spec/mux-manifest.v1.schema.json) | Version **1** JSON Schema for how you **declare** internal host/port routes on a machine. |
+| [`docs/`](docs/) | Architecture, VPS deployment, Cloudflare integration, manifest field reference. |
+| [`worker/entry.mjs`](worker/entry.mjs) | Optional **Cloudflare Worker** module: canonical HTTP surface at **`/protocol/v1/…`** (legacy **`/__ark/…`** kept for compatibility). |
 
-## Adapter routes
+## Why
 
-| Path | Behaviour |
-|------|-----------|
-| `GET /__ark/*` | Metadata JSON (deployment, service, env keys). |
-| `GET /__ark/adapter/ws` (or `websocket`, `https`) | Proxies the request (including WebSocket upgrade) to `ARK_WS_BACKEND_URL` or `ARK_HTTP_BACKEND_URL`. |
-| `GET /__ark/adapter/tcp` | Expects a WebSocket upgrade; frames are forwarded to `ARK_TCP_HOST`:`ARK_TCP_PORT`. |
+On a VPS you often run several processes (HTTP API, WebRTC signaling, game server, metrics). Cloudflare and browsers want **one or few public origins**. This project standardizes:
 
-Bindings are plain-text vars on the Worker. Ark sets `ARK_DEPLOYMENT_ID`, `ARK_SERVICE_ID`, `ARK_IMAGE_REF`, `ARK_PORT`, and `ARK_RESOLVED_ENV` on each deploy. Optional bridge vars can be added later via the same Workers metadata API or Wrangler vars.
+1. A **machine-readable manifest** of “logical name → upstream host:port” (and optional TLS/SNI hints).
+2. A **single ingress** on the VPS (reverse proxy, multiplexer, or tunnel) that fans traffic out using that manifest.
+3. A **documented HTTP adapter surface** (`/protocol/v1/adapter/…`) for bridging WebSocket or TCP through HTTPS at the edge.
 
-## Local Wrangler
+## Quick links
+
+- [Overview](docs/overview.md) — goals and vocabulary.
+- [VPS deployment](docs/vps.md) — multi-port → single listener on your server.
+- [Cloudflare](docs/cloudflare.md) — tunnels, Workers, and how they attach to that single port.
+- [Manifest v1](docs/manifest.md) — schema walkthrough and validation.
+- [Worker routes](docs/worker.md) — paths and Worker `plain_text` bindings used by the reference Worker.
+
+## Reference Worker (Wrangler)
 
 ```bash
+cd "$(dirname "$0")"
 npx wrangler@3 dev
 ```
 
-Set `[vars]` in `wrangler.toml` or use `wrangler secret put` where appropriate.
+Bindings are documented in [`docs/worker.md`](docs/worker.md). Ark and other systems may upload the same `worker.js` via the Cloudflare API with different binding values.
 
 ## License
 
-MIT
+Mozilla Public License 2.0 — see [`LICENSE`](LICENSE).

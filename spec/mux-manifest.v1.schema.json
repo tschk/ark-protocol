@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tschk/ark-protocol/spec/mux-manifest.v1.schema.json",
+  "title": "mux-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "listen", "routes"],
+  "properties": {
+    "version": {
+      "const": "1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "listen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "enum": ["tcp", "unix"]
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "unix_socket": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "tcp"
+              }
+            }
+          },
+          "then": {
+            "required": ["host", "port"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "unix"
+              }
+            }
+          },
+          "then": {
+            "required": ["unix_socket"]
+          }
+        }
+      ]
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/route"
+      }
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "match", "upstream"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "host"],
+              "properties": {
+                "type": {
+                  "const": "http_host"
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "prefix"],
+              "properties": {
+                "type": {
+                  "const": "path_prefix"
+                },
+                "prefix": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "server_name"],
+              "properties": {
+                "type": {
+                  "const": "tls_sni"
+                },
+                "server_name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        },
+        "upstream": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["host", "port"],
+          "properties": {
+            "host": {
+              "type": "string",
+              "minLength": 1
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "protocol": {
+              "enum": ["http", "https", "tcp", "udp", "ws", "wss"]
+            }
+          }
+        },
+        "public": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "hostname": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "path": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

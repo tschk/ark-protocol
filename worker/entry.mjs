@@ -1,23 +1,23 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
 import { connect } from "cloudflare:sockets";
 
 export default {
   async fetch(request, env) {
     const u = new URL(request.url);
+    const pathname = u.pathname;
     const meta = metaFromEnv(env);
-    let parsed = {};
-    try {
-      const raw = env.ARK_RESOLVED_ENV;
-      if (typeof raw === "string" && raw.length) parsed = JSON.parse(raw);
-    } catch (_) {}
+    const parsed = parseResolvedEnv(env);
 
-    if (u.pathname.startsWith("/__ark/adapter/")) {
-      const parts = u.pathname.split("/").filter(Boolean);
-      const adapterType = parts[2] || "unknown";
+    const adapterType = adapterTypeFromPath(pathname);
+    if (adapterType !== null) {
       return handleAdapter(request, env, adapterType, meta, parsed);
     }
-    if (u.pathname.startsWith("/__ark/")) {
+    if (isDiagnosticPath(pathname)) {
       return Response.json(
-        { ...meta, path: u.pathname, env_keys: Object.keys(parsed) },
+        { ...meta, path: pathname, env_keys: Object.keys(parsed) },
         { headers: { "cache-control": "no-store" } },
       );
     }
@@ -30,12 +30,46 @@ export default {
 
 function metaFromEnv(env) {
   return {
-    ark: true,
+    protocol_id: "ark-protocol",
+    protocol_version: "1",
     deployment_id: env.ARK_DEPLOYMENT_ID || "",
     service_id: env.ARK_SERVICE_ID || "",
     image_ref: env.ARK_IMAGE_REF || "",
     port: Number(env.ARK_PORT || "8080") || 8080,
   };
+}
+
+function parseResolvedEnv(env) {
+  let parsed = {};
+  try {
+    const raw = env.ARK_RESOLVED_ENV;
+    if (typeof raw === "string" && raw.length) parsed = JSON.parse(raw);
+  } catch (_) {}
+  return parsed;
+}
+
+function adapterTypeFromPath(pathname) {
+  let m = pathname.match(/^\/protocol\/v1\/adapter\/([^/]+)/);
+  if (m) return m[1];
+  m = pathname.match(/^\/__ark\/adapter\/([^/]+)/);
+  if (m) return m[1];
+  return null;
+}
+
+function isDiagnosticPath(pathname) {
+  if (pathname.startsWith("/protocol/v1/adapter/")) return false;
+  if (pathname.startsWith("/protocol/v1")) return true;
+  if (pathname.startsWith("/__ark/adapter/")) return false;
+  if (pathname.startsWith("/__ark/")) return true;
+  return false;
+}
+
+function upstreamPathname(pathname) {
+  const p1 = pathname.match(/^\/protocol\/v1\/adapter\/[^/]+(\/.*)?$/);
+  if (p1) return p1[1] && p1[1].length > 0 ? p1[1] : "/";
+  const p2 = pathname.match(/^\/__ark\/adapter\/[^/]+(\/.*)?$/);
+  if (p2) return p2[1] && p2[1].length > 0 ? p2[1] : "/";
+  return pathname;
 }
 
 async function handleAdapter(request, env, adapterType, meta, parsed) {
@@ -44,7 +78,7 @@ async function handleAdapter(request, env, adapterType, meta, parsed) {
     const backend = env.ARK_WS_BACKEND_URL || env.ARK_HTTP_BACKEND_URL;
     if (!backend) {
       return json501(adapterType, meta, {
-        hint: "Set ARK_WS_BACKEND_URL (wss:// or https://) for WebSocket/HTTP upgrade proxy.",
+        hint: "Set ARK_WS_BACKEND_URL (wss:// or https://) or ARK_HTTP_BACKEND_URL for WebSocket/HTTP upgrade proxy.",
         env_keys: Object.keys(parsed),
       });
     }
@@ -84,7 +118,8 @@ function json501(adapterType, meta, extra) {
 async function proxyWebOrHttp(request, backendBase) {
   const b = backendBase.replace(/\/$/, "");
   const u = new URL(request.url);
-  const target = new URL(u.pathname + u.search, b);
+  const path = upstreamPathname(u.pathname);
+  const target = new URL(path + u.search, b);
   const headers = new Headers(request.headers);
   headers.delete("host");
   return fetch(

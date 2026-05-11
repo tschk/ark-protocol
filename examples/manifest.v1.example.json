@@ -1,0 +1,40 @@
+{
+  "version": "1",
+  "id": "example-vps-001",
+  "listen": {
+    "mode": "tcp",
+    "host": "0.0.0.0",
+    "port": 8443
+  },
+  "routes": [
+    {
+      "name": "api",
+      "match": {
+        "type": "http_host",
+        "host": "api.example.internal"
+      },
+      "upstream": {
+        "host": "127.0.0.1",
+        "port": 3000,
+        "protocol": "http"
+      },
+      "public": {
+        "hostname": "api.example.com",
+        "path": "/"
+      }
+    },
+    {
+      "name": "signal",
+      "match": {
+        "type": "path_prefix",
+        "prefix": "/signal"
+      },
+      "upstream": {
+        "host": "127.0.0.1",
+        "port": 4000,
+        "protocol": "ws"
+      }
+    }
+  ],
+  "extensions": {}
+}
