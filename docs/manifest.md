@@ -31,4 +31,4 @@ See `examples/manifest.v1.example.json` in this repository.
 
 ## Consumers
 
-Any program may read this JSON: Ark, Ansible, a small Go binary, nginx or Caddy generators, or a VPS-side `muxd`. The **reference Cloudflare Worker** reads the same JSON from the `MUX_MANIFEST_JSON` binding at runtime (after validating `version` and `routes`). On the Worker, `listen` is ignored today; only `routes` drive edge routing. A VPS-side multiplexer should honor `listen` as documented in [vps.md](vps.md).
+Any program may read this JSON: Ark, Ansible, a small Go binary, nginx or Caddy generators, or a VPS-side `muxd`. The Rust crate **`mux-manifest`** (in `crates/mux-manifest`) exposes `manifest_json_for_deploy` so control planes can emit the same JSON string as the Worker binding without reimplementing URL parsing. The **reference Cloudflare Worker** reads `MUX_MANIFEST_JSON` at runtime (after validating `version` and `routes`). On the Worker, `listen` is ignored today; only `routes` drive edge routing. A VPS-side multiplexer should honor `listen` as documented in [vps.md](vps.md).
