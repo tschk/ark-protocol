@@ -30,3 +30,18 @@ jobs:
 
       - name: cargo test
         run: cargo test --all-features
+
+  js:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.18"
+
+      - name: Bun tests (@tschk/mux-manifest)
+        working-directory: packages/mux-manifest
+        run: bun test

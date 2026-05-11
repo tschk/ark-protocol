@@ -1,0 +1,29 @@
+{
+  "name": "@tschk/mux-manifest",
+  "version": "0.1.0",
+  "description": "Build MUX_MANIFEST_JSON for ark-protocol edge workers from resolved environment (Node.js, Bun, browsers with URL + JSON).",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tschk/ark-protocol.git",
+    "directory": "packages/mux-manifest"
+  },
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    }
+  },
+  "files": ["src"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}
