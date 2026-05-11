@@ -15,14 +15,38 @@ export default {
     if (adapterType !== null) {
       return handleAdapter(request, env, adapterType, meta, parsed);
     }
+
+    const manifest = parseMuxManifest(env);
+
     if (isDiagnosticPath(pathname)) {
       return Response.json(
-        { ...meta, path: pathname, env_keys: Object.keys(parsed) },
+        {
+          ...meta,
+          path: pathname,
+          env_keys: Object.keys(parsed),
+          mux_manifest_active: Boolean(manifest),
+        },
         { headers: { "cache-control": "no-store" } },
       );
     }
+
+    if (manifest) {
+      const route = pickRoute(request, manifest);
+      if (route) {
+        return tryManifestRequest(request, route, meta);
+      }
+      return Response.json(
+        {
+          ...meta,
+          error: "mux manifest is active but no route matched this request",
+          path: pathname,
+        },
+        { status: 404, headers: { "cache-control": "no-store" } },
+      );
+    }
+
     return Response.json(
-      { ok: true, ...meta, env: parsed },
+      { ok: true, ...meta, env: parsed, mux_manifest_active: false },
       { headers: { "cache-control": "no-store" } },
     );
   },
@@ -46,6 +70,136 @@ function parseResolvedEnv(env) {
     if (typeof raw === "string" && raw.length) parsed = JSON.parse(raw);
   } catch (_) {}
   return parsed;
+}
+
+function parseMuxManifest(env) {
+  const raw = env.MUX_MANIFEST_JSON;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let m;
+  try {
+    m = JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+  if (!m || typeof m !== "object") return null;
+  if (m.version !== "1") return null;
+  if (!Array.isArray(m.routes) || m.routes.length === 0) return null;
+  for (const r of m.routes) {
+    if (!r || typeof r !== "object") return null;
+    if (typeof r.name !== "string" || !r.match || !r.upstream) return null;
+    const up = r.upstream;
+    if (typeof up.host !== "string" || !up.host.length) return null;
+    if (typeof up.port !== "number" || !Number.isFinite(up.port)) return null;
+  }
+  return m;
+}
+
+function isBlockedUpstream(host) {
+  const h = String(host).toLowerCase();
+  return (
+    h === "127.0.0.1" ||
+    h === "localhost" ||
+    h === "::1" ||
+    h === "0.0.0.0" ||
+    h.startsWith("127.")
+  );
+}
+
+function pickRoute(request, manifest) {
+  const url = new URL(request.url);
+  const hostHeader = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  const pathname = url.pathname;
+  const edgeHost = url.hostname.toLowerCase();
+  for (const route of manifest.routes) {
+    const m = route.match;
+    if (!m || !m.type) continue;
+    if (m.type === "http_host") {
+      if (hostHeader === String(m.host || "").toLowerCase()) return route;
+    } else if (m.type === "path_prefix") {
+      if (pathname.startsWith(m.prefix)) return route;
+    } else if (m.type === "tls_sni") {
+      if (edgeHost === String(m.server_name || "").toLowerCase()) return route;
+    }
+  }
+  return null;
+}
+
+function manifestPathForUpstream(request, route) {
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+  const m = route.match;
+  if (m && m.type === "path_prefix" && typeof m.prefix === "string") {
+    if (!pathname.startsWith(m.prefix)) return pathname + url.search;
+    const rest = pathname.slice(m.prefix.length) || "/";
+    return rest + url.search;
+  }
+  return pathname + url.search;
+}
+
+function upstreamProtocol(up) {
+  return String(up.protocol || "http").toLowerCase();
+}
+
+function originBaseFromUpstream(up, proto) {
+  const scheme =
+    proto === "wss" || proto === "ws"
+      ? proto === "wss"
+        ? "wss"
+        : "ws"
+      : proto === "https"
+        ? "https"
+        : "http";
+  const defaultPort = scheme === "https" || scheme === "wss" ? 443 : 80;
+  const p = typeof up.port === "number" && Number.isFinite(up.port) ? up.port : defaultPort;
+  const omit =
+    (scheme === "http" && p === 80) ||
+    (scheme === "https" && p === 443) ||
+    (scheme === "ws" && p === 80) ||
+    (scheme === "wss" && p === 443);
+  if (omit) return `${scheme}://${up.host}/`;
+  return `${scheme}://${up.host}:${p}/`;
+}
+
+async function proxyWebOrHttpToUrl(request, originBase, pathWithSearch) {
+  const path = pathWithSearch.startsWith("/") ? pathWithSearch : `/${pathWithSearch}`;
+  const target = new URL(path, originBase);
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  return fetch(
+    new Request(target.toString(), {
+      method: request.method,
+      headers,
+      body: request.body,
+      redirect: "manual",
+    }),
+  );
+}
+
+async function tryManifestRequest(request, route, meta) {
+  const up = route.upstream;
+  if (isBlockedUpstream(up.host)) {
+    return Response.json(
+      {
+        ...meta,
+        error: "manifest upstream must be reachable from Cloudflare (not loopback)",
+        host: up.host,
+      },
+      { status: 400, headers: { "cache-control": "no-store" } },
+    );
+  }
+  const proto = upstreamProtocol(up);
+  const pathOut = manifestPathForUpstream(request, route);
+  const base = originBaseFromUpstream(up, proto);
+  if (proto === "tcp") {
+    return tcpOverWebSocket(request, up.host, up.port, meta);
+  }
+  if (proto === "udp") {
+    return Response.json(
+      { ...meta, error: "manifest udp upstream is not supported in this worker" },
+      { status: 501, headers: { "cache-control": "no-store" } },
+    );
+  }
+  return proxyWebOrHttpToUrl(request, base, pathOut);
 }
 
 function adapterTypeFromPath(pathname) {

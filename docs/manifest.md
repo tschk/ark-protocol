@@ -20,7 +20,7 @@ Each route describes how to match a client request and where to send it.
 |-------|---------|
 | `name` | Logical service name (for logs and ops). |
 | `match` | Discriminated matcher (see schema `oneOf`). Examples: `http_host`, `path_prefix`, `tls_sni`. |
-| `upstream` | Target `host`, `port`, and optional `protocol` hint (`http`, `https`, `tcp`, `udp`). |
+| `upstream` | Target `host`, `port`, and optional `protocol` hint (`http`, `https`, `tcp`, `udp`, `ws`, `wss`). |
 | `public` | Optional external port or hostname hint for documentation or UI. |
 
 The schema requires at least one route. Matchers are evaluated in array order; first win is implementation-defined unless you document otherwise for your multiplexer.
@@ -31,4 +31,4 @@ See `examples/manifest.v1.example.json` in this repository.
 
 ## Consumers
 
-Any program may read this JSON: Ark, Ansible, a small Go binary, or nginx config generators. The Worker in this repo does **not** parse the manifest at runtime today; it only implements the HTTP adapter surface. A future `muxd` binary could load the manifest directly.
+Any program may read this JSON: Ark, Ansible, a small Go binary, nginx or Caddy generators, or a VPS-side `muxd`. The **reference Cloudflare Worker** reads the same JSON from the `MUX_MANIFEST_JSON` binding at runtime (after validating `version` and `routes`). On the Worker, `listen` is ignored today; only `routes` drive edge routing. A VPS-side multiplexer should honor `listen` as documented in [vps.md](vps.md).

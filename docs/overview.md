@@ -13,7 +13,7 @@ A typical VPS runs **multiple** TCP listeners (for example `127.0.0.1:3000` for 
 
 2. **Ingress discipline** — you run **one** TLS-terminated listener (or one Cloudflare Tunnel outbound socket) on the VPS; local software uses the manifest to decide which upstream receives each connection.
 
-3. **Optional Worker module** — when you terminate TLS on Cloudflare Workers instead of on the VPS, the reference `worker/entry.mjs` exposes **`/protocol/v1/…`** for diagnostics and adapter-style bridging (HTTP/WebSocket proxy, TCP-over-WebSocket using `cloudflare:sockets`). That surface is **generic HTTP**; any product may generate URLs under that prefix.
+3. **Optional Worker module** — when you terminate TLS on Cloudflare Workers instead of on the VPS, the reference `worker/entry.mjs` exposes **`/protocol/v1/…`** for diagnostics and adapter-style bridging (HTTP/WebSocket proxy, TCP-over-WebSocket using `cloudflare:sockets`). The same module reads **`MUX_MANIFEST_JSON`** at runtime and applies **`routes`** when valid. That surface is **generic HTTP**; any product may generate URLs under that prefix.
 
 ## Relationship to Ark
 
