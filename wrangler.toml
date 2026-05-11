@@ -1,0 +1,10 @@
+name = "ark-protocol-dev"
+main = "worker/entry.mjs"
+compatibility_date = "2024-11-01"
+
+[vars]
+ARK_DEPLOYMENT_ID = "local"
+ARK_SERVICE_ID = "local"
+ARK_IMAGE_REF = "local:dev"
+ARK_PORT = "8080"
+ARK_RESOLVED_ENV = "{}"
